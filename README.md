@@ -28,7 +28,7 @@ Memory Box allows users to save and search for memories using natural language, 
 
 ### Cline MCP Server
 
-[Memory Box MCP Server](https://github.com/amotivv/memory-box-mcp) - An MCP server that allows you to interact with Memory Box directly from Cline.
+[Memory Box MCP Server](https://github.com/amotivv/memory-box-mcp) - An MCP server that allows you to interact with Memory Box directly from Cline!
 
 Features:
 - Save memories with proper formatting based on customizable templates
