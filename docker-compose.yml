@@ -1,0 +1,59 @@
+services:
+  # PostgreSQL with pgvector
+  postgres:
+    image: pgvector/pgvector:pg15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-your_secure_password}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-memory_plugin}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d memory_plugin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Memory API backend
+  memory-api:
+    build: 
+      context: ./backend
+      args:
+        - ENV=${APP_ENV:-development}  # Default to development for local use
+    ports:
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
+    environment:
+      # Application environment
+      - APP_ENV=${APP_ENV:-development}
+      - WORKERS=${WORKERS:-4}  # Default to 4 workers if not specified
+      
+      # Database configuration
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-your_secure_password}
+      - POSTGRES_DB=${POSTGRES_DB:-memory_plugin}
+      - POSTGRES_HOST=postgres
+      
+      # Ollama configuration
+      - OLLAMA_URL=${OLLAMA_URL}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mxbai-embed-large}
+      
+      # API configuration
+      - API_PORT=${API_PORT:-8000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.55}
+      - DEFAULT_BUCKET_NAME=${DEFAULT_BUCKET_NAME:-General}
+      - SEARCH_RESULTS_LIMIT=${SEARCH_RESULTS_LIMIT:-10}
+      - INITIAL_SEARCH_LIMIT=${INITIAL_SEARCH_LIMIT:-15}
+      - KEYWORD_BOOST_FACTOR=${KEYWORD_BOOST_FACTOR:-0.05}
+      - EMBEDDING_TIMEOUT=${EMBEDDING_TIMEOUT:-30.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+
+volumes:
+  postgres-data:
