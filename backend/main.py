@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, Query
+from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Union
 import os
@@ -108,6 +109,10 @@ class MemoryResponse(BaseModel):
     created_at: str
     similarity: Optional[float] = None
 
+class MemoriesListResponse(BaseModel):
+    """Response model for lists of memories to ensure consistent array serialization."""
+    items: List[Dict[str, Any]]
+
 class DebugInfo(BaseModel):
     query: str
     query_terms: List[str]
@@ -118,9 +123,64 @@ class SearchResponse(BaseModel):
     results: List[Dict[str, Any]]
     debug: Optional[DebugInfo] = None
 
+# Token verification helper
+async def verify_token_and_bucket(token: str, bucket_id: str, conn) -> bool:
+    """
+    Verify if a token (user_id) and bucket combination is valid.
+    
+    Args:
+        token: The user_id token
+        bucket_id: The bucket name
+        conn: Database connection
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not token or not bucket_id:
+        return False
+        
+    # Check if the token and bucket combination exists
+    bucket = await conn.fetchrow(
+        "SELECT id FROM buckets WHERE name = $1 AND user_id = $2", 
+        bucket_id, token
+    )
+    
+    return bucket is not None
+
 # Database connection pool
 async def get_db_pool():
     return await asyncpg.create_pool(DATABASE_URL)
+
+# Custom exception handler for better error responses
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    error_response = {
+        "error": True,
+        "status": exc.status_code,
+        "detail": exc.detail
+    }
+    
+    # Add more context for authentication errors
+    if exc.status_code == 401:
+        error_response["auth_required"] = True
+        error_response["message"] = "Authentication required. Please provide a valid token."
+    elif exc.status_code == 403:
+        error_response["message"] = "You don't have permission to access this resource."
+    
+    # Log the error
+    logger.warning(
+        f"HTTP error: {exc.status_code}", 
+        extra={
+            "path": request.url.path,
+            "detail": exc.detail,
+            "client_ip": request.client.host if hasattr(request, 'client') else "unknown"
+        }
+    )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response
+    )
 
 pool = None
 
@@ -177,8 +237,7 @@ async def add_memory(memory: Memory, authorization: str = Header(None)):
         logger.warning("Unauthorized memory add attempt - missing token")
         raise HTTPException(status_code=401, detail="Missing token")
         
-    # Extract user_id from token (implement your own auth validation)
-    # For simplicity, using the token as user_id here
+    # Extract user_id from token (token is the user_id)
     user_id = token
     logger.debug("Processing memory for user", extra={"user_id": user_id})
     
@@ -198,13 +257,26 @@ async def add_memory(memory: Memory, authorization: str = Header(None)):
     bucket_id = memory.bucketId or DEFAULT_BUCKET_NAME
     
     async with pool.acquire() as conn:
-        # Make sure bucket exists (create if not)
+        # Verify token and bucket combination
         bucket = await conn.fetchrow(
             "SELECT * FROM buckets WHERE name = $1 AND user_id = $2", 
             bucket_id, user_id
         )
         
         if not bucket:
+            # If bucket doesn't exist, check if user has any buckets
+            user_buckets = await conn.fetch(
+                "SELECT name FROM buckets WHERE user_id = $1", 
+                user_id
+            )
+            
+            if not user_buckets:
+                logger.warning("Unauthorized memory add attempt - invalid token", 
+                              extra={"token_prefix": token[:4] + "..." if len(token) > 4 else token})
+                raise HTTPException(status_code=401, detail="Invalid token")
+            
+            # Create the bucket for this user
+            logger.info(f"Creating new bucket '{bucket_id}' for user", extra={"user_id": user_id})
             await conn.execute(
                 "INSERT INTO buckets(name, user_id) VALUES($1, $2)",
                 bucket_id, user_id
@@ -221,7 +293,7 @@ async def add_memory(memory: Memory, authorization: str = Header(None)):
     
     return {"id": memory_id, "text": memory.text}
 
-@app.get("/api/v2/memory", response_model=Union[List[Dict[str, Any]], SearchResponse])
+@app.get("/api/v2/memory", response_model=Union[MemoriesListResponse, SearchResponse])
 async def get_memories(
     query: Optional[str] = None, 
     all: Optional[bool] = False,
@@ -245,18 +317,39 @@ async def get_memories(
         logger.warning("Unauthorized memory retrieval attempt - missing token")
         raise HTTPException(status_code=401, detail="Missing token")
         
-    # Extract user_id from token
+    # Extract user_id from token (token is the user_id)
     user_id = token
     logger.debug("Processing memory request for user", extra={"user_id": user_id})
     
     async with pool.acquire() as conn:
+        # Verify token is valid by checking if user has any buckets
+        user_buckets = await conn.fetch(
+            "SELECT name FROM buckets WHERE user_id = $1", 
+            user_id
+        )
+        
+        if not user_buckets:
+            logger.warning("Unauthorized memory retrieval - invalid token", 
+                          extra={"token_prefix": token[:4] + "..." if len(token) > 4 else token})
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        # For bucket-specific operations, verify the bucket belongs to the user
+        if bucketId:
+            is_valid = await verify_token_and_bucket(token, bucketId, conn)
+            
+            if not is_valid:
+                logger.warning("Unauthorized bucket access attempt", 
+                              extra={"bucket": bucketId, "token_prefix": token[:4] + "..." if len(token) > 4 else token})
+                raise HTTPException(status_code=403, detail="Access denied to this bucket")
         # If getting all memories
         if all:
             memories = await conn.fetch(
                 "SELECT id, text, bucket_id, created_at FROM memories WHERE user_id = $1",
                 user_id
             )
-            return [dict(m) for m in memories]
+            memory_list = [dict(m) for m in memories]
+            logger.debug(f"Returning {len(memory_list)} memories from all buckets")
+            return MemoriesListResponse(items=memory_list)
         
         # If getting memories from a specific bucket
         if bucketId:
@@ -264,7 +357,9 @@ async def get_memories(
                 "SELECT id, text, bucket_id, created_at FROM memories WHERE bucket_id = $1 AND user_id = $2",
                 bucketId, user_id
             )
-            return [dict(m) for m in memories]
+            memory_list = [dict(m) for m in memories]
+            logger.debug(f"Returning {len(memory_list)} memories from bucket {bucketId}")
+            return MemoriesListResponse(items=memory_list)
         
         # If searching for memories
         if query:
@@ -343,10 +438,13 @@ async def get_memories(
                     )
                 )
             
-            return result_memories
+            # Return search results using the consistent response model
+            logger.debug(f"Returning {len(result_memories)} search results")
+            return MemoriesListResponse(items=result_memories)
     
     # If no parameters specified, return an empty list
-    return []
+    logger.debug("No query parameters specified, returning empty list")
+    return MemoriesListResponse(items=[])
 
 # Health check endpoint
 @app.get("/health")
