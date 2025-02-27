@@ -269,10 +269,49 @@ The `user-id` parameter must match the Bearer token you'll use in API requests t
    nano .env
    ```
 
-4. Start the application in production mode:
+4. Make sure the start.sh script is executable:
+   ```bash
+   chmod +x backend/start.sh
+   ```
+
+5. Start the application in production mode:
    ```bash
    APP_ENV=production docker-compose up -d
    ```
+
+### Connecting to Ollama on the Host Machine
+
+If you're running Ollama directly on your VM (not in Docker), you need to configure the connection between your Docker containers and the host machine:
+
+1. In your `.env` file, set the Ollama URL to use `host.docker.internal`:
+   ```
+   OLLAMA_URL=http://host.docker.internal:11434
+   ```
+
+2. The docker-compose.yml file includes the necessary `extra_hosts` configuration:
+   ```yaml
+   extra_hosts:
+     - "host.docker.internal:host-gateway"
+   ```
+
+This setup allows the Docker container to connect to services running on the host machine, such as Ollama listening on port 11434.
+
+#### Troubleshooting Ollama Connection
+
+If you encounter issues connecting to Ollama:
+
+1. Verify Ollama is running on the host:
+   ```bash
+   curl http://localhost:11434/api/version
+   ```
+
+2. Check that Ollama is listening on all interfaces (not just localhost):
+   ```bash
+   # Check listening interfaces
+   sudo netstat -tulpn | grep 11434
+   ```
+
+3. If Ollama is only listening on localhost, you may need to configure it to listen on all interfaces or use a reverse proxy.
 
 5. Set up a reverse proxy (recommended for production):
    

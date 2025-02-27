@@ -12,7 +12,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d memory_plugin"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-memory_plugin}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -24,7 +24,7 @@ services:
       args:
         - ENV=${APP_ENV:-development}  # Default to development for local use
     ports:
-      - "${API_PORT:-8000}:${API_PORT:-8000}"
+      - "127.0.0.1:${API_PORT:-8000}:${API_PORT:-8000}"
     environment:
       # Application environment
       - APP_ENV=${APP_ENV:-development}
@@ -49,6 +49,9 @@ services:
       - INITIAL_SEARCH_LIMIT=${INITIAL_SEARCH_LIMIT:-15}
       - KEYWORD_BOOST_FACTOR=${KEYWORD_BOOST_FACTOR:-0.05}
       - EMBEDDING_TIMEOUT=${EMBEDDING_TIMEOUT:-30.0}
+    # Add extra_hosts for connecting to host machine services like Ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
