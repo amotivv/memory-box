@@ -37,18 +37,18 @@ Effective prompt engineering is crucial for maximizing the value of AI tools lik
 - **User Experience**: Clear guidelines result in more consistent and useful AI responses.
 - **Knowledge Management**: Systematic approaches to memory storage create more valuable knowledge bases over time.
 
-## About Amotivv, Inc.
+## About amotivv, inc.
 
-Amotivv, Inc. specializes in developing AI-powered solutions that enhance productivity and knowledge management. Our expertise includes:
+amotivv, inc. specializes in developing AI-powered solutions that enhance productivity and knowledge management. Our expertise includes:
 
 - **Custom AI Integration**: Tailoring AI solutions to specific business needs and workflows.
 - **Prompt Engineering**: Designing effective prompts that maximize the value of large language models.
 - **Knowledge Management Systems**: Building systems like Memory Box that help organizations capture and retrieve institutional knowledge.
 - **AI Training and Consultation**: Helping teams effectively leverage AI tools through training and best practices.
 
-Amotivv can help your organization implement similar memory solutions, enhancing your team's ability to store, retrieve, and leverage knowledge. Our approach combines technical expertise with a deep understanding of how users interact with AI systems.
+amotivv, inc. can help your organization implement similar memory solutions, enhancing your team's ability to store, retrieve, and leverage knowledge. Our approach combines technical expertise with a deep understanding of how users interact with AI systems.
 
-For more information about how Amotivv can help with your AI integration needs, contact us at [contact@amotivv.com](mailto:contact@amotivv.com).
+For more information about how amotivv, inc. can help with your AI integration needs, contact us at [ai@amotivv.com](mailto:ai@amotivv.com).
 
 ## Version Control
 
