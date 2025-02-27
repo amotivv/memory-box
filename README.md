@@ -24,6 +24,20 @@ Memory Box allows users to save and search for memories using natural language, 
 - **Fallback Mechanisms**: Falls back to text search if semantic search yields no results
 - **Debug Mode**: Inspect search results with detailed debug information
 
+## Integrations
+
+### Cline MCP Server
+
+[Memory Box MCP Server](https://github.com/amotivv/memory-box-mcp) - An MCP server that allows you to interact with Memory Box directly from Cline.
+
+Features:
+- Save memories with proper formatting based on customizable templates
+- Search memories using semantic search
+- Retrieve memories from specific buckets
+- Format memories according to structured guidelines
+
+This integration makes it easy to save important information from your Cline conversations to Memory Box for future retrieval.
+
 ## Technology Stack
 
 - **Backend**: FastAPI (Python)
