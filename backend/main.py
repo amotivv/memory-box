@@ -123,6 +123,10 @@ class SearchResponse(BaseModel):
     results: List[Dict[str, Any]]
     debug: Optional[DebugInfo] = None
 
+class BucketsListResponse(BaseModel):
+    """Response model for lists of buckets."""
+    items: List[Dict[str, Any]]
+
 # Token verification helper
 async def verify_token_and_bucket(token: str, bucket_id: str, conn) -> bool:
     """
@@ -451,6 +455,37 @@ async def get_memories(
 async def health_check():
     return {"status": "healthy"}
 
+# Endpoint to list all buckets for a user
+@app.get("/api/v2/buckets", response_model=BucketsListResponse)
+async def get_buckets(authorization: str = Header(None)):
+    # Extract token
+    token = authorization.replace("Bearer ", "") if authorization else None
+    if not token:
+        logger.warning("Unauthorized buckets retrieval attempt - missing token")
+        raise HTTPException(status_code=401, detail="Missing token")
+        
+    # Extract user_id from token (token is the user_id)
+    user_id = token
+    logger.debug("Retrieving buckets for user", extra={"user_id": user_id})
+    
+    async with pool.acquire() as conn:
+        # Query that joins buckets with latest memory timestamps
+        buckets_with_latest = await conn.fetch("""
+            SELECT b.id, b.name, b.created_at, 
+                   (SELECT MAX(created_at) 
+                    FROM memories m 
+                    WHERE m.bucket_id = b.name AND m.user_id = b.user_id) AS latest_memory_timestamp
+            FROM buckets b
+            WHERE b.user_id = $1
+            ORDER BY latest_memory_timestamp DESC NULLS LAST
+        """, user_id)
+        
+        # Convert to list of dictionaries
+        bucket_list = [dict(b) for b in buckets_with_latest]
+        
+    logger.debug(f"Returning {len(bucket_list)} buckets")
+    return BucketsListResponse(items=bucket_list)
+
 # Version information endpoint
 @app.get("/version")
 async def version():
@@ -460,7 +495,8 @@ async def version():
             "Semantic search with pgvector",
             "Keyword boosting",
             "Fallback text search",
-            "Debug mode"
+            "Debug mode",
+            "Bucket listing"
         ]
     }
 
