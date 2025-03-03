@@ -5,7 +5,7 @@
     "emoji": "🧩",
     "title": "Memory Box",
     "iconURL": "https://storage.googleapis.com/amotivv-public/memory-box-logo.png",
-    "syncedAt": "2025-03-03T03:02:53.514Z",
+    "syncedAt": "2025-03-03T14:47:04.937Z",
     "deletedAt": null,
     "openaiSpec": {
         "name": "memory_plugin",
@@ -41,7 +41,7 @@
                 }
             }
         },
-        "description": "Memory Box stores and recalls user information for personalized interactions. Be proactive in storing relevant details without waiting for user prompts. If a message ends with '\\m', treat it as a request to remember the preceding information. Always check loaded memories for relevant details before asking the user. Store information succinctly.\n\n**Important:** The plugin uses the bucket specified in user settings by default. When the user explicitly mentions a different bucket in a message, use that bucket instead by providing it in the 'bucket' parameter. You can list all available buckets using 'list_buckets' mode.\n\nUse 'search' mode only when you need to look up specific information and haven't loaded memories yet in this conversation. Once you've loaded memories using either 'load_all' or 'load_bucket', just check those directly instead of using search.\n\nIf unsure about storing information, ask the user if they want it remembered. Use appropriate modes and parameters to store or fetch memories. Display any returned alerts or error messages to the user."
+        "description": "Memory Box stores and recalls user information. Store information proactively or when messages end with '\\m'. Always check loaded memories before asking questions. Use the default bucket from settings unless otherwise specified. Search mode is for finding specific information when memories aren't loaded. After loading memories with 'load_all' or 'load_bucket', reference them directly instead of searching again. Display any returned alerts or errors to the user."
     },
     "outputType": "respond_to_ai",
     "oauthConfig": null,
