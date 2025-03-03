@@ -100,7 +100,7 @@ erDiagram
         int embedding_count
         int api_call_count
         int total_bytes_processed
-        unique(user_id, year, month)
+        string composite_key "UK(user_id,year,month)"
     }
     BUCKETS ||--o{ MEMORIES : contains
     PLANS ||--o{ USER_PLANS : assigned_to
