@@ -12,6 +12,70 @@
     }
   ],
   "paths": {
+    "/api/v2/usage": {
+      "get": {
+        "operationId": "getUserUsage",
+        "summary": "Retrieve user usage statistics",
+        "description": "Get usage statistics for the authenticated user including current plan, usage counts, and data processed",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Retrieved usage statistics successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "plan": {
+                      "type": "string",
+                      "description": "Current subscription plan"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "User status and limit enforcement details"
+                    },
+                    "currentPeriod": {
+                      "type": "object",
+                      "properties": {
+                        "storeMemoryOperations": {
+                          "type": "integer",
+                          "description": "Number of store memory operations in current period"
+                        },
+                        "searchMemoryOperations": {
+                          "type": "integer",
+                          "description": "Number of search memory operations in current period"
+                        },
+                        "apiCalls": {
+                          "type": "integer",
+                          "description": "Number of API calls in current period"
+                        },
+                        "dataProcessed": {
+                          "type": "string",
+                          "description": "Total data processed in current period (formatted string with units)"
+                        }
+                      }
+                    },
+                    "operationBreakdown": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "count": {
+                            "type": "integer",
+                            "description": "Number of operations performed"
+                          }
+                        }
+                      },
+                      "description": "Detailed breakdown of operations by type"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v2/memory": {
       "get": {
         "operationId": "retrieveMemories",
