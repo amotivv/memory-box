@@ -1,0 +1,178 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Memory Box API",
+    "description": "API for storing and retrieving semantic memories using vector embeddings",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://memorybox.amotivv.ai",
+      "description": "Memory Box API Server"
+    }
+  ],
+  "paths": {
+    "/api/v2/memory": {
+      "get": {
+        "operationId": "retrieveMemories",
+        "summary": "Retrieve memories by semantic search or from a specific bucket",
+        "description": "Search for memories using semantic meaning or retrieve all memories from a specific bucket",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "The search query to find semantically related memories",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bucketId",
+            "in": "query",
+            "description": "The bucket name to retrieve memories from",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["amotivv-chatgpt-chat"]
+            }
+          },
+          {
+            "name": "debug",
+            "in": "query",
+            "description": "Enable debug mode to see similarity scores",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieved memories successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "integer"},
+                          "text": {"type": "string"},
+                          "bucket_id": {"type": "string"},
+                          "created_at": {"type": "string", "format": "date-time"},
+                          "similarity": {"type": "number", "description": "Only present in search results"}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "storeMemory",
+        "summary": "Store a new memory",
+        "description": "Store a new memory with proper formatting for future retrieval",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["text", "bucketId"],
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "description": "The memory content to store"
+                  },
+                  "bucketId": {
+                    "type": "string",
+                    "description": "Bucket name to store the memory in",
+                    "enum": ["amotivv-chatgpt-chat"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Memory stored successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {"type": "integer"},
+                    "text": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v2/buckets": {
+      "get": {
+        "operationId": "listBuckets",
+        "summary": "List all buckets for the user",
+        "description": "Retrieves all memory buckets associated with the authenticated user, including the latest activity timestamp for each bucket",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Retrieved buckets successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "integer"},
+                          "name": {"type": "string"},
+                          "created_at": {"type": "string", "format": "date-time"},
+                          "latest_memory_timestamp": {
+                            "type": "string", 
+                            "format": "date-time",
+                            "description": "Timestamp of the most recent memory in this bucket",
+                            "nullable": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {},
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ]
+}
