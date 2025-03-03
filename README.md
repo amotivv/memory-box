@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3"></a>
 </p>
 
 Memory Box allows users to save and search for memories using natural language, providing an intuitive way to store and retrieve your important information.
@@ -415,4 +415,6 @@ In development mode, all log levels are shown. In production mode, only `INFO` a
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see the [LICENSE](LICENSE) file for details.
+
+The AGPL-3.0 license ensures that if you modify and use this software to provide a service over a network, you must make your modified source code available to users of that service. This protects the open source nature of the project and prevents proprietary forks.

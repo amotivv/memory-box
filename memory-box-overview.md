@@ -10,6 +10,7 @@ graph TD
     Backend[FastAPI Backend] -->|Vector Embeddings| Ollama[Ollama API]
     Backend -->|Store/Retrieve| DB[(PostgreSQL + pgvector)]
     Plugin[Memory Box Plugin] -->|Integration| Client
+    Backend -->|Usage Tracking| Metrics[(Usage Metrics)]
 ```
 
 The system consists of:
@@ -18,11 +19,13 @@ The system consists of:
    - Handles memory storage and retrieval
    - Processes vector embeddings for semantic search
    - Implements hybrid search with keyword boosting
+   - Tracks API usage for billing purposes
 
 2. **Database** (PostgreSQL with pgvector)
    - Stores memories and their vector embeddings
    - Organizes memories into user-specific buckets
    - Enables efficient vector similarity search
+   - Records usage metrics and plan information
 
 3. **Embedding Service** (Ollama API)
    - Generates vector embeddings for memories and queries
@@ -39,6 +42,8 @@ The system consists of:
 - **Hybrid Search**: Combines vector similarity with keyword boosting
 - **Fallback Mechanisms**: Falls back to text search if semantic search yields no results
 - **Debug Mode**: Inspect search results with detailed debug information
+- **Usage Tracking**: Records API usage for analytics and billing
+- **Plan Management**: Supports different service tiers with configurable limits
 
 ## Database Schema
 
@@ -58,7 +63,49 @@ erDiagram
         string user_id
         timestamp created_at
     }
+    PLANS {
+        int id PK
+        string name UK
+        int store_memory_limit
+        int search_memory_limit
+        int embedding_limit
+        int api_call_limit
+        int storage_limit_bytes
+        int price_cents
+        timestamp created_at
+        timestamp updated_at
+    }
+    USER_PLANS {
+        string user_id PK
+        string plan_name FK
+        timestamp created_at
+        timestamp updated_at
+    }
+    USAGE_METRICS {
+        int id PK
+        string user_id
+        string bucket_id
+        string operation_type
+        int operation_count
+        int bytes_processed
+        timestamp timestamp
+    }
+    MONTHLY_USAGE {
+        int id PK
+        string user_id
+        int year
+        int month
+        int store_memory_count
+        int search_memory_count
+        int embedding_count
+        int api_call_count
+        int total_bytes_processed
+        unique(user_id, year, month)
+    }
     BUCKETS ||--o{ MEMORIES : contains
+    PLANS ||--o{ USER_PLANS : assigned_to
+    USER_PLANS ||--o{ USAGE_METRICS : tracks
+    USER_PLANS ||--o{ MONTHLY_USAGE : aggregates
 ```
 
 ## Authentication System
@@ -68,6 +115,26 @@ Memory Box uses a simple token-based authentication system:
 - No built-in user management or password authentication
 - Each client generates and maintains its own unique token/identifier
 - All memories and buckets are associated with a specific `user_id`
+
+## Usage Tracking and Billing
+
+Memory Box includes a comprehensive usage tracking system to support various billing models:
+
+1. **Service Tiers**
+   - Predefined plans with different resource limits
+   - Default plans include: free, basic, professional, and legacy
+   - Each plan defines limits for API operations and storage
+
+2. **Usage Metrics**
+   - Detailed tracking of API operations by type
+   - Measurement of data volume processed
+   - Monthly aggregation for billing cycles
+   - Operation categorization (store_memory, search_memory, etc.)
+
+3. **Plan Assignment**
+   - Each user is assigned to a specific plan
+   - Existing users are automatically assigned to the 'legacy' plan
+   - Admin API for managing user plans
 
 ## Deployment Options
 
@@ -87,12 +154,31 @@ The system includes a structured approach to memory formatting with different te
 
 ## API Endpoints
 
+### Memory Management
 - `POST /api/v2/memory`: Add a new memory
 - `GET /api/v2/memory`: Retrieve memories with various query parameters
   - `query`: Search for memories semantically similar to this text
   - `all`: Set to `true` to retrieve all memories
   - `bucketId`: Retrieve memories from a specific bucket
   - `debug`: Set to `true` to include debug information in search results
+- `GET /api/v2/buckets`: List all buckets for a user
+
+### Usage and Plans
+- `GET /api/v2/usage`: Retrieve usage statistics for the current user
+  - Returns current plan, usage counts, and limits
+  - Includes monthly aggregates and operation breakdown
+
+### Admin Endpoints
+- `GET /admin/system-stats`: System-wide usage statistics
+  - Total operations tracked
+  - User distribution by plan
+  - Operation breakdown
+  - Most active users
+- `PUT /admin/user-plans/{user_id}`: Update a user's plan
+  - Requires admin token authentication
+  - Assigns the specified user to a different plan
+
+### System Endpoints
 - `GET /health`: Health check endpoint
 - `GET /version`: Version information endpoint
 
@@ -119,6 +205,9 @@ The system can be configured through environment variables:
 - `INITIAL_SEARCH_LIMIT`: Maximum number of initial results to fetch for reranking (default: 15)
 - `KEYWORD_BOOST_FACTOR`: Factor to boost similarity score for keyword matches (default: 0.05)
 - `EMBEDDING_TIMEOUT`: Timeout in seconds for embedding API requests (default: 30.0)
+
+### Admin Configuration
+- `ADMIN_TOKEN`: Authentication token for admin endpoints
 
 ## Technology Stack
 

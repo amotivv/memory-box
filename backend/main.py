@@ -1,3 +1,21 @@
+"""
+Memory Box - A semantic memory storage and retrieval system
+Copyright (C) 2025 amotivv, inc.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
+
 from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,7 +28,10 @@ import asyncpg
 import logging
 import json
 import sys
+import asyncio
 from datetime import datetime
+
+from usage_tracking import UsageTrackingMiddleware, RequestBodyCaptureMiddleware, PoolAccessMiddleware
 
 # Custom JSON formatter for Google Cloud compatibility
 class GoogleCloudFormatter(logging.Formatter):
@@ -86,6 +107,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize pool variable as global
+pool = None
+
+# Register our usage tracking middlewares in the correct order
+app.add_middleware(UsageTrackingMiddleware)
+app.add_middleware(PoolAccessMiddleware)
+app.add_middleware(RequestBodyCaptureMiddleware)
 
 # Database connection parameters
 DATABASE_URL = f"postgresql://{os.environ.get('POSTGRES_USER')}:{os.environ.get('POSTGRES_PASSWORD')}@{os.environ.get('POSTGRES_HOST')}/{os.environ.get('POSTGRES_DB')}"
@@ -185,8 +214,6 @@ async def http_exception_handler(request, exc):
         status_code=exc.status_code,
         content=error_response
     )
-
-pool = None
 
 @app.on_event("startup")
 async def startup():
@@ -486,6 +513,195 @@ async def get_buckets(authorization: str = Header(None)):
     logger.debug(f"Returning {len(bucket_list)} buckets")
     return BucketsListResponse(items=bucket_list)
 
+# User-accessible usage stats endpoint
+@app.get("/api/v2/usage")
+async def user_usage_stats(authorization: str = Header(None)):
+    # Extract token
+    token = authorization.replace("Bearer ", "") if authorization else None
+    if not token:
+        logger.warning("Unauthorized usage stats attempt - missing token")
+        raise HTTPException(status_code=401, detail="Missing token")
+    
+    # User ID is the token
+    user_id = token
+    
+    async with pool.acquire() as conn:
+        # Check if tracking tables exist
+        tables_exist = await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'usage_metrics'
+            );
+            """
+        )
+        
+        if not tables_exist:
+            return {"status": "usage tracking not configured"}
+        
+        # Get user's plan information
+        user_plan = await conn.fetchrow(
+            """
+            SELECT up.user_id, up.plan_name, p.store_memory_limit, p.search_memory_limit,
+                   p.embedding_limit, p.api_call_limit, p.storage_limit_bytes
+            FROM user_plans up
+            JOIN plans p ON up.plan_name = p.name
+            WHERE up.user_id = $1
+            """,
+            user_id
+        )
+        
+        if not user_plan:
+            return {"status": "no plan assigned"}
+        
+        # Get current month's usage
+        now = datetime.now()
+        monthly_usage = await conn.fetchrow(
+            """
+            SELECT store_memory_count, search_memory_count, embedding_count, api_call_count, 
+                   total_bytes_processed
+            FROM monthly_usage
+            WHERE user_id = $1 AND year = $2 AND month = $3
+            """,
+            user_id, now.year, now.month
+        )
+        
+        # Get operation breakdown
+        user_operations = await conn.fetch(
+            """
+            SELECT operation_type, COUNT(*) as count
+            FROM usage_metrics
+            WHERE user_id = $1
+            GROUP BY operation_type
+            ORDER BY count DESC
+            """,
+            user_id
+        )
+        
+        # Check if this is a legacy user (for UI customization)
+        is_legacy = user_plan["plan_name"] == "legacy" if user_plan else False
+        
+        return {
+            "status": "active",
+            "plan": user_plan["plan_name"] if user_plan else None,
+            "is_legacy_user": is_legacy,
+            "current_month_usage": dict(monthly_usage) if monthly_usage else {
+                "store_memory_count": 0,
+                "search_memory_count": 0,
+                "embedding_count": 0,
+                "api_call_count": 0,
+                "total_bytes_processed": 0
+            },
+            "limits": {
+                "store_memory_limit": user_plan["store_memory_limit"] if user_plan else None,
+                "search_memory_limit": user_plan["search_memory_limit"] if user_plan else None,
+                "embedding_limit": user_plan["embedding_limit"] if user_plan else None,
+                "api_call_limit": user_plan["api_call_limit"] if user_plan else None,
+                "storage_limit_bytes": user_plan["storage_limit_bytes"] if user_plan else None,
+            } if not is_legacy else {"enforced": False, "message": "Legacy users have no enforced limits"},
+            "operations_breakdown": [{"operation": row["operation_type"], "count": row["count"]} for row in user_operations]
+        }
+
+# Admin-only system stats endpoint
+@app.get("/admin/system-stats")
+async def admin_system_stats(authorization: str = Header(None)):
+    # Check admin token
+    token = authorization.replace("Bearer ", "") if authorization else None
+    admin_token = os.environ.get("ADMIN_TOKEN")
+    if not token or not admin_token or token != admin_token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    async with pool.acquire() as conn:
+        # Check if tables exist
+        tables_exist = await conn.fetchval(
+            """
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'usage_metrics'
+            );
+            """
+        )
+        
+        if not tables_exist:
+            return {"status": "usage tracking not configured"}
+        
+        # System-wide statistics
+        total_metrics = await conn.fetchval("SELECT COUNT(*) FROM usage_metrics")
+        user_count = await conn.fetchval("SELECT COUNT(*) FROM user_plans")
+        plan_breakdown = await conn.fetch(
+            """
+            SELECT plan_name, COUNT(*) as user_count
+            FROM user_plans
+            GROUP BY plan_name
+            """
+        )
+        
+        # Operation stats
+        top_operations = await conn.fetch(
+            """
+            SELECT operation_type, COUNT(*) as count
+            FROM usage_metrics
+            GROUP BY operation_type
+            ORDER BY count DESC
+            """
+        )
+        
+        # Most active users
+        active_users = await conn.fetch(
+            """
+            SELECT user_id, COUNT(*) as operation_count
+            FROM usage_metrics
+            GROUP BY user_id
+            ORDER BY operation_count DESC
+            LIMIT 10
+            """
+        )
+        
+        return {
+            "status": "active",
+            "total_operations_tracked": total_metrics,
+            "total_users": user_count,
+            "plan_distribution": [{"plan": row["plan_name"], "users": row["user_count"]} for row in plan_breakdown],
+            "operation_breakdown": [{"operation": row["operation_type"], "count": row["count"]} for row in top_operations],
+            "most_active_users": [{"user_id": row["user_id"], "operations": row["operation_count"]} for row in active_users]
+        }
+
+# Admin endpoint to update a user's plan
+@app.put("/admin/user-plans/{user_id}")
+async def update_user_plan(
+    user_id: str, 
+    plan_name: str = Query(..., description="New plan name"),
+    authorization: str = Header(None)
+):
+    # Check admin token
+    token = authorization.replace("Bearer ", "") if authorization else None
+    admin_token = os.environ.get("ADMIN_TOKEN")
+    if not token or not admin_token or token != admin_token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    async with pool.acquire() as conn:
+        # Validate plan exists
+        plan_exists = await conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM plans WHERE name = $1)",
+            plan_name
+        )
+        
+        if not plan_exists:
+            raise HTTPException(status_code=400, detail=f"Plan '{plan_name}' does not exist")
+        
+        # Update user plan
+        await conn.execute(
+            """
+            INSERT INTO user_plans (user_id, plan_name, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (user_id) DO UPDATE
+            SET plan_name = $2, updated_at = NOW()
+            """,
+            user_id, plan_name
+        )
+        
+        return {"status": "success", "message": f"User {user_id} updated to plan: {plan_name}"}
+
 # Version information endpoint
 @app.get("/version")
 async def version():
@@ -496,7 +712,8 @@ async def version():
             "Keyword boosting",
             "Fallback text search",
             "Debug mode",
-            "Bucket listing"
+            "Bucket listing",
+            "Usage tracking"
         ]
     }
 
