@@ -5,7 +5,7 @@
     "emoji": "🧩",
     "title": "Memory Box",
     "iconURL": "https://storage.googleapis.com/amotivv-public/memory-box-logo.png",
-    "syncedAt": "2025-03-03T02:56:27.154Z",
+    "syncedAt": "2025-03-03T03:02:53.514Z",
     "deletedAt": null,
     "openaiSpec": {
         "name": "memory_plugin",
@@ -25,7 +25,7 @@
                         "usage_stats"
                     ],
                     "type": "string",
-                    "description": "Required. Mode of operation:\n- 'store': Add memories proactively when you detect important information or when the user uses '\\m'.\n- 'search': Use to find specific memories. This is the default mode for looking up information.\n- 'load_all': ONLY use when explicitly requested by user. Never use this mode automatically.\n- 'load_bucket': **Use this mode to load memories from a specific bucket.**\n- 'list_buckets': Use this mode to retrieve all buckets for the user with their latest activity timestamps."
+                    "description": "Required. Mode of operation:\n- 'store': Add memories proactively when you detect important information or when the user uses '\\m'.\n- 'search': Use to find specific memories. This is the default mode for looking up information.\n- 'load_all': ONLY use when explicitly requested by user. Never use this mode automatically.\n- 'load_bucket': **Use this mode to load memories from a specific bucket.**\n- 'list_buckets': Use this mode to retrieve all buckets for the user with their latest activity timestamps.\n- 'usage_stats': Use this mode to retrieve the user's current plan, usage metrics, and limits."
                 },
                 "query": {
                     "type": "string",
