@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="https://memorybox.dev">Visit memorybox.dev</a>
+</p>
+
+<p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3"></a>
 </p>
 
@@ -23,8 +27,20 @@ Memory Box allows users to save and search for memories using natural language, 
 - **Hybrid Search**: Combines vector similarity with keyword boosting for better results
 - **Fallback Mechanisms**: Falls back to text search if semantic search yields no results
 - **Debug Mode**: Inspect search results with detailed debug information
+- **Usage Tracking**: Comprehensive analytics on API usage and data processing
+- **Plan Management**: Support for different service tiers with configurable limits
+- **Admin Dashboard**: System-wide statistics and user plan management
+- **OpenAI Plugin Integration**: Ready-to-use GPT integration via plugin specification
 
 ## Integrations
+
+### OpenAI GPT Integration
+
+Memory Box can be used as a custom GPT plugin, allowing ChatGPT and other compatible LLMs to:
+- Store and retrieve memories directly from conversations
+- Track usage statistics and plan limits
+- Organize information in customized buckets
+- Format memories with proper structure and dating
 
 ### Cline MCP Server
 
@@ -44,6 +60,8 @@ This integration makes it easy to save important information from your Cline con
 - **Database**: PostgreSQL with pgvector extension
 - **Embeddings**: Ollama API with mxbai-embed-large model
 - **Containerization**: Docker and Docker Compose
+- **Plugin Support**: OpenAI GPT plugin compatibility
+- **Usage Tracking**: Comprehensive analytics and plan management
 
 ## Prerequisites
 
@@ -54,7 +72,7 @@ This integration makes it easy to save important information from your Cline con
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/memory-box.git
+   git clone https://github.com/amotivv/memory-box.git
    cd memory-box
    ```
 
@@ -154,7 +172,7 @@ curl "http://localhost:8000/api/v2/memory?bucketId=Learning" \
 
 ## API Documentation
 
-### Endpoints
+### Core Endpoints
 
 #### POST /api/v2/memory
 Add a new memory.
@@ -174,6 +192,28 @@ Retrieve memories with various query parameters:
 - `all`: Set to `true` to retrieve all memories
 - `bucketId`: Retrieve memories from a specific bucket
 - `debug`: Set to `true` to include debug information in search results
+
+#### GET /api/v2/buckets
+List all buckets for the user with their latest activity timestamps.
+
+### Usage and Admin Endpoints
+
+#### GET /api/v2/usage
+Retrieve usage statistics for the current user, including:
+- Current subscription plan
+- Usage metrics for the current period
+- Operation counts by type
+- Applicable usage limits
+
+#### GET /admin/system-stats
+Admin-only endpoint for system-wide usage statistics:
+- Total operations tracked
+- User distribution by plan
+- Operation breakdown
+- Most active users
+
+#### PUT /admin/user-plans/{user_id}
+Admin-only endpoint to update a user's subscription plan.
 
 ## Development
 
@@ -195,7 +235,7 @@ curl -H "Authorization: Bearer your-unique-user-id" http://localhost:8000/api/v2
 
 ### Database Schema
 
-The application uses two main tables:
+The application uses several tables:
 
 1. `memories`: Stores the memory text, vector embeddings, and metadata
    - Each memory is associated with both a `bucket_id` and a `user_id`
@@ -205,6 +245,22 @@ The application uses two main tables:
    - Each bucket belongs to a specific `user_id`
    - The combination of `name` and `user_id` must be unique
    - The database enforces that memories can only be associated with buckets that belong to the same user
+   
+3. `plans`: Defines service tiers with resource limits
+   - Contains plan name, pricing, and various usage limits
+   - Predefined plans include free, basic, professional, and legacy
+
+4. `user_plans`: Maps users to their subscription plans
+   - Each user is assigned to a specific plan
+   - Tracks when plans were assigned or updated
+
+5. `usage_metrics`: Records detailed API usage
+   - Tracks operation type, count, and data volume
+   - Used for billing and analytics
+
+6. `monthly_usage`: Aggregates usage metrics by month
+   - Summarizes usage for each billing period
+   - Tracks different operation categories
 
 ### Creating a New Bucket
 
@@ -242,13 +298,16 @@ The `user-id` parameter must match the Bearer token you'll use in API requests t
 - `KEYWORD_BOOST_FACTOR`: Factor to boost similarity score for keyword matches (default: 0.05)
 - `EMBEDDING_TIMEOUT`: Timeout in seconds for embedding API requests (default: 30.0)
 
+#### Admin Configuration
+- `ADMIN_TOKEN`: Authentication token for admin endpoints
+
 ## Deployment
 
 ### Local Development Deployment
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/memory-box.git
+   git clone https://github.com/amotivv/memory-box.git
    cd memory-box
    ```
 
@@ -272,7 +331,7 @@ The `user-id` parameter must match the Bearer token you'll use in API requests t
 
 2. Clone the repository on your VM:
    ```bash
-   git clone https://github.com/yourusername/memory-box.git
+   git clone https://github.com/amotivv/memory-box.git
    cd memory-box
    ```
 
