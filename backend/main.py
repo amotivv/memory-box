@@ -20,6 +20,8 @@ from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request, Sec
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Union
 import os
@@ -89,15 +91,26 @@ logger = setup_logging(
     level=logging.DEBUG if os.environ.get("APP_ENV") == "development" else logging.INFO
 )
 
+# Tags for API documentation organization
+tags_metadata = [
+    {"name": "memories", "description": "Operations with user memories"},
+    {"name": "buckets", "description": "Operations with memory buckets"},
+    {"name": "usage", "description": "Usage tracking operations"},
+    {"name": "admin", "description": "Admin-only operations"},
+    {"name": "system", "description": "System information endpoints"},
+]
+
 app = FastAPI(
     title="Memory Box API",
     description="A semantic memory storage and retrieval system",
     version="1.1.0",
-    docs_url="/docs"
+    docs_url="/docs",
+    openapi_tags=tags_metadata
 )
 
-# Security scheme
-security = HTTPBearer(auto_error=False)
+# Security schemes
+user_security = HTTPBearer(scheme_name="User Authentication")
+admin_security = HTTPBearer(scheme_name="Admin Authentication")
 
 # API configuration
 API_PORT = int(os.environ.get("API_PORT", 8000))
@@ -266,8 +279,9 @@ def extract_query_terms(query: str) -> set:
     stopwords = {"the", "and", "or", "a", "an", "in", "on", "at", "for", "to", "of", "with", "by"}
     return {word.lower() for word in query.split() if word.lower() not in stopwords and len(word) > 2}
 
-# Authentication helper for the docs and API
-async def get_user_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+# Authentication helpers
+async def get_user_token(credentials: HTTPAuthorizationCredentials = Security(user_security)):
+    """Validate user authentication token"""
     if credentials is None:
         raise HTTPException(status_code=401, detail="Missing token")
     token = credentials.credentials
@@ -275,8 +289,21 @@ async def get_user_token(credentials: HTTPAuthorizationCredentials = Security(se
         raise HTTPException(status_code=401, detail="Missing token")
     return token
 
+async def get_admin_token(credentials: HTTPAuthorizationCredentials = Security(admin_security)):
+    """Validate admin authentication token"""
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing admin token")
+    
+    token = credentials.credentials
+    admin_token = os.environ.get("ADMIN_TOKEN")
+    
+    if not admin_token or token != admin_token:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    
+    return token
+
 # API endpoints
-@app.post("/api/v2/memory")
+@app.post("/api/v2/memory", tags=["memories"])
 async def add_memory(
     memory: Memory, 
     token: str = Depends(get_user_token)
@@ -339,7 +366,7 @@ async def add_memory(
     
     return {"id": memory_id, "text": memory.text}
 
-@app.get("/api/v2/memory", response_model=Union[MemoriesListResponse, SearchResponse])
+@app.get("/api/v2/memory", response_model=Union[MemoriesListResponse, SearchResponse], tags=["memories"])
 async def get_memories(
     query: Optional[str] = None, 
     all: Optional[bool] = False,
@@ -487,12 +514,12 @@ async def get_memories(
     return MemoriesListResponse(items=[])
 
 # Health check endpoint
-@app.get("/health")
+@app.get("/health", tags=["system"])
 async def health_check():
     return {"status": "healthy"}
 
 # Endpoint to list all buckets for a user
-@app.get("/api/v2/buckets", response_model=BucketsListResponse)
+@app.get("/api/v2/buckets", response_model=BucketsListResponse, tags=["buckets"])
 async def get_buckets(token: str = Depends(get_user_token)):
     # Extract user_id from token (token is the user_id)
     user_id = token
@@ -517,7 +544,7 @@ async def get_buckets(token: str = Depends(get_user_token)):
     return BucketsListResponse(items=bucket_list)
 
 # User-accessible usage stats endpoint
-@app.get("/api/v2/usage")
+@app.get("/api/v2/usage", tags=["usage"])
 async def user_usage_stats(token: str = Depends(get_user_token)):
     # User ID is the token
     user_id = token
@@ -600,13 +627,8 @@ async def user_usage_stats(token: str = Depends(get_user_token)):
         }
 
 # Admin-only system stats endpoint
-@app.get("/admin/system-stats")
-async def admin_system_stats(authorization: str = Header(None)):
-    # Check admin token
-    token = authorization.replace("Bearer ", "") if authorization else None
-    admin_token = os.environ.get("ADMIN_TOKEN")
-    if not token or not admin_token or token != admin_token:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+@app.get("/admin/system-stats", tags=["admin"])
+async def admin_system_stats(token: str = Depends(get_admin_token)):
     
     async with pool.acquire() as conn:
         # Check if tables exist
@@ -664,17 +686,12 @@ async def admin_system_stats(authorization: str = Header(None)):
         }
 
 # Admin endpoint to update a user's plan
-@app.put("/admin/user-plans/{user_id}")
+@app.put("/admin/user-plans/{user_id}", tags=["admin"])
 async def update_user_plan(
     user_id: str, 
     plan_name: str = Query(..., description="New plan name"),
-    authorization: str = Header(None)
+    token: str = Depends(get_admin_token)
 ):
-    # Check admin token
-    token = authorization.replace("Bearer ", "") if authorization else None
-    admin_token = os.environ.get("ADMIN_TOKEN")
-    if not token or not admin_token or token != admin_token:
-        raise HTTPException(status_code=401, detail="Unauthorized")
     
     async with pool.acquire() as conn:
         # Validate plan exists
@@ -700,7 +717,7 @@ async def update_user_plan(
         return {"status": "success", "message": f"User {user_id} updated to plan: {plan_name}"}
 
 # Version information endpoint
-@app.get("/version")
+@app.get("/version", tags=["system"])
 async def version():
     return {
         "version": "1.1.0",
