@@ -49,6 +49,9 @@ services:
       - INITIAL_SEARCH_LIMIT=${INITIAL_SEARCH_LIMIT:-15}
       - KEYWORD_BOOST_FACTOR=${KEYWORD_BOOST_FACTOR:-0.05}
       - EMBEDDING_TIMEOUT=${EMBEDDING_TIMEOUT:-30.0}
+      
+      # Admin configuration
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
     # Add extra_hosts for connecting to host machine services like Ollama
     extra_hosts:
       - "host.docker.internal:host-gateway"
