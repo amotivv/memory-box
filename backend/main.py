@@ -16,9 +16,10 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request
+from fastapi import FastAPI, HTTPException, Depends, Header, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any, Union
 import os
@@ -88,7 +89,15 @@ logger = setup_logging(
     level=logging.DEBUG if os.environ.get("APP_ENV") == "development" else logging.INFO
 )
 
-app = FastAPI()
+app = FastAPI(
+    title="Memory Box API",
+    description="A semantic memory storage and retrieval system",
+    version="1.1.0",
+    docs_url="/docs"
+)
+
+# Security scheme
+security = HTTPBearer(auto_error=False)
 
 # API configuration
 API_PORT = int(os.environ.get("API_PORT", 8000))
@@ -257,17 +266,23 @@ def extract_query_terms(query: str) -> set:
     stopwords = {"the", "and", "or", "a", "an", "in", "on", "at", "for", "to", "of", "with", "by"}
     return {word.lower() for word in query.split() if word.lower() not in stopwords and len(word) > 2}
 
+# Authentication helper for the docs and API
+async def get_user_token(credentials: HTTPAuthorizationCredentials = Security(security)):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Missing token")
+    token = credentials.credentials
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+    return token
+
 # API endpoints
 @app.post("/api/v2/memory")
-async def add_memory(memory: Memory, authorization: str = Header(None)):
+async def add_memory(
+    memory: Memory, 
+    token: str = Depends(get_user_token)
+):
     logger.info("Adding new memory", extra={"bucket_id": memory.bucketId})
     
-    # Extract token
-    token = authorization.replace("Bearer ", "") if authorization else None
-    if not token:
-        logger.warning("Unauthorized memory add attempt - missing token")
-        raise HTTPException(status_code=401, detail="Missing token")
-        
     # Extract user_id from token (token is the user_id)
     user_id = token
     logger.debug("Processing memory for user", extra={"user_id": user_id})
@@ -329,7 +344,7 @@ async def get_memories(
     query: Optional[str] = None, 
     all: Optional[bool] = False,
     bucketId: Optional[str] = None,
-    authorization: str = Header(None),
+    token: str = Depends(get_user_token),
     debug: bool = Query(False, description="Return debug information about the search")
 ):
     # Log the request type
@@ -342,12 +357,6 @@ async def get_memories(
     else:
         logger.info("Memory request with no parameters")
     
-    # Extract token
-    token = authorization.replace("Bearer ", "") if authorization else None
-    if not token:
-        logger.warning("Unauthorized memory retrieval attempt - missing token")
-        raise HTTPException(status_code=401, detail="Missing token")
-        
     # Extract user_id from token (token is the user_id)
     user_id = token
     logger.debug("Processing memory request for user", extra={"user_id": user_id})
@@ -484,13 +493,7 @@ async def health_check():
 
 # Endpoint to list all buckets for a user
 @app.get("/api/v2/buckets", response_model=BucketsListResponse)
-async def get_buckets(authorization: str = Header(None)):
-    # Extract token
-    token = authorization.replace("Bearer ", "") if authorization else None
-    if not token:
-        logger.warning("Unauthorized buckets retrieval attempt - missing token")
-        raise HTTPException(status_code=401, detail="Missing token")
-        
+async def get_buckets(token: str = Depends(get_user_token)):
     # Extract user_id from token (token is the user_id)
     user_id = token
     logger.debug("Retrieving buckets for user", extra={"user_id": user_id})
@@ -515,13 +518,7 @@ async def get_buckets(authorization: str = Header(None)):
 
 # User-accessible usage stats endpoint
 @app.get("/api/v2/usage")
-async def user_usage_stats(authorization: str = Header(None)):
-    # Extract token
-    token = authorization.replace("Bearer ", "") if authorization else None
-    if not token:
-        logger.warning("Unauthorized usage stats attempt - missing token")
-        raise HTTPException(status_code=401, detail="Missing token")
-    
+async def user_usage_stats(token: str = Depends(get_user_token)):
     # User ID is the token
     user_id = token
     
